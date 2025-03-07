@@ -47,5 +47,6 @@ pkgs.mkShell {
     ipykernel
     jupyterlab
     wandb
+    opencv-python
   ]);
 }
