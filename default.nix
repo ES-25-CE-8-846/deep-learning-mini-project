@@ -48,5 +48,6 @@ pkgs.mkShell {
     jupyterlab
     wandb
     opencv-python
+    pytorch-lightning
   ]);
 }
