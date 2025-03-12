@@ -10,7 +10,6 @@ import cv2
 from PIL import Image 
 
 
-path_to_data = "/home/a/.cache/kagglehub/datasets/kritikseth/fruit-and-vegetable-image-recognition/versions/8"
 
 class FruitsAndVeggies(Dataset):
     def __init__(self, split_root, transforms):
@@ -54,12 +53,14 @@ class FruitsAndVeggies(Dataset):
         return image, label
     
 
+if __name__ =="__main__":
 
-test = FruitsAndVeggies(os.path.join(path_to_data,"validation"), torchvision.models.ViT_B_32_Weights.IMAGENET1K_V1.transforms())
+    path_to_data = "/home/a/.cache/kagglehub/datasets/kritikseth/fruit-and-vegetable-image-recognition/versions/8"
+    test = FruitsAndVeggies(os.path.join(path_to_data,"validation"), torchvision.models.ViT_B_32_Weights.IMAGENET1K_V1.transforms())
 
-for data in test:
-    image, label = data 
-    print(image.size)
+    for data in test:
+        image, label = data 
+        print(image.size)
 
 
 
