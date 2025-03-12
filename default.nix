@@ -49,5 +49,6 @@ pkgs.mkShell {
     wandb
     opencv-python
     pytorch-lightning
+    torchinfo
   ]);
 }
