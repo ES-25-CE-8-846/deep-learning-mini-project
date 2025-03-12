@@ -17,11 +17,10 @@ class FruitsAndVeggies(Dataset):
         class_dir_names = sorted(os.listdir(split_root))
         self.n_classes = len(class_dir_names)
         self.transforms = transforms
-        # create one-hot encoding 
+        
         self.dataset_list = []
         for i, class_dir in enumerate(class_dir_names):
-            label = torch.zeros(self.n_classes)
-            label[i] = 1
+            label = i
             
             extension_set = {"jpg", "png",  "JPG", "jpeg"}
 
