@@ -6,23 +6,33 @@ import torch.utils.data as data
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import os
+import cv2 
+from PIL import Image 
 
 
 path_to_data = "/home/a/.cache/kagglehub/datasets/kritikseth/fruit-and-vegetable-image-recognition/versions/8"
 
-
 class FruitsAndVeggies(Dataset):
-    def __init__(self, split_root):
+    def __init__(self, split_root, transforms):
         # create a dict of labels and filepaths
         class_dir_names = sorted(os.listdir(split_root))
         n_classes = len(class_dir_names)
+        self.transforms = transforms
         # create one-hot encoding 
         self.dataset_list = []
         for i, class_dir in enumerate(class_dir_names):
             label = torch.zeros(n_classes)
             label[i] = 1
+            
+            extension_set = {"jpg", "png",  "JPG", "jpeg"}
+
             for image in sorted(os.listdir(os.path.join(split_root, class_dir))):
-                self.dataset_list.append([label, os.path.join(split_root,class_dir,image)])
+                extension = image.split(".")[-1]
+
+                if extension in extension_set:
+                    self.dataset_list.append([label, os.path.join(split_root,class_dir,image)])
+                else:
+                    print(f"{extension} found in dataset")
         
     def __len__(self):
         return len(self.dataset_list)
@@ -30,18 +40,26 @@ class FruitsAndVeggies(Dataset):
     def __getitem__(self, index):
         data_list = self.dataset_list[index]
         image_path = data_list[1]
+        print(image_path)
         label = data_list[0]
-        image = torchvision.io.read_file(image_path)
-        
+        image = Image.open(image_path)
+       
+        print(image.mode)
+
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+
+        image = self.transforms(image)
+
         return image, label
     
 
 
-
-test = FruitsAndVeggies(os.path.join(path_to_data,"train"))
+test = FruitsAndVeggies(os.path.join(path_to_data,"validation"), torchvision.models.ViT_B_32_Weights.IMAGENET1K_V1.transforms())
 
 for data in test:
-    print(data)
+    image, label = data 
+    print(image.size)
 
 
 
