@@ -39,11 +39,9 @@ class FruitsAndVeggies(Dataset):
     def __getitem__(self, index):
         data_list = self.dataset_list[index]
         image_path = data_list[1]
-        print(image_path)
         label = data_list[0]
         image = Image.open(image_path)
        
-        print(image.mode)
 
         if image.mode != "RGB":
             image = image.convert("RGB")
