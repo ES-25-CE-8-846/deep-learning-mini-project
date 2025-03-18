@@ -4,5 +4,5 @@ We decided to choose the Vision task.
 
 # Install
 ```shell
-git clone git@github.com:ES-25-CE-8-846/
+git clone git@github.com:ES-25-CE-8-846/deep-learning-mini-project.git
 ```
