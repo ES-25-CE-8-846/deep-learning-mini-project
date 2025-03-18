@@ -1,7 +1,6 @@
 
 import torch 
 import torchvision 
-from torchinfo import torchinfo
 import torch.utils.data as data
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
@@ -15,7 +14,19 @@ class FruitsAndVeggies(Dataset):
     def __init__(self, split_root, transforms):
         # create a dict of labels and filepaths
         class_dir_names = sorted(os.listdir(split_root))
+
+        n_classes = len(class_dir_names)
+        
+        print(n_classes)
+        
+        self.label_name_dict = {}
+
+        for label, class_name in enumerate(class_dir_names):
+            self.label_name_dict[label] = class_name
+
+
         self.n_classes = len(class_dir_names)
+
         self.transforms = transforms
         
         self.dataset_list = []
@@ -39,8 +50,7 @@ class FruitsAndVeggies(Dataset):
         data_list = self.dataset_list[index]
         image_path = data_list[1]
         label = data_list[0]
-        image = Image.open(image_path)
-       
+        image = Image.open(image_path)       
 
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -52,9 +62,24 @@ class FruitsAndVeggies(Dataset):
 
 if __name__ =="__main__":
 
+
     path_to_data = "/home/dreezy/.cache/kagglehub/datasets/kritikseth/fruit-and-vegetable-image-recognition/versions/8"
+
     test = FruitsAndVeggies(os.path.join(path_to_data,"validation"), torchvision.models.ViT_B_32_Weights.IMAGENET1K_V1.transforms())
+    
+    data_loader = DataLoader(test, batch_size=32, shuffle=True)
+
+
+    # for data, label in data_loader:
+    #     print(label)
+    #
+    # for data in test:
+    #     image, label = data
+
+    print(test.label_name_dict)
+        # print(image.size)
 
     for data in test:
         image, label = data 
         print(image.size)
+
