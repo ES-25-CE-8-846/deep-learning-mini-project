@@ -16,7 +16,14 @@ with open("/ceph/home/student.aau.dk/bd45mb/wandb.txt", 'r') as wandb_key_file:
 path_to_data = "/ceph/home/student.aau.dk/bd45mb/datasets/kaggle_fruits_and_veggies/"
 
 class Trainer:
-    def __init__(self, model, train_dataloader, validation_dataloader, optimizer: torch.optim.Optimizer, device, model_name):
+    def __init__(self,
+                 model,
+                 train_dataloader,
+                 validation_dataloader,
+                 optimizer: torch.optim.Optimizer,
+                 device,
+                 model_name,
+                 experiment_path):
         self.model = model.to(device)  # Move model to the device (GPU)
         self.train_dataloader = train_dataloader
         self.validation_dataloader = validation_dataloader
@@ -25,6 +32,7 @@ class Trainer:
         self.loss_function = torch.nn.CrossEntropyLoss()
         self.current_epoch = 0
         self.model_name = model_name
+        self.experiment_path = experiment_path
 
     def _run_batch(self, data: torch.Tensor, labels: torch.Tensor):
         data, labels = data.to(self.device), labels.to(self.device)  # Move data and labels to GPU
@@ -44,7 +52,7 @@ class Trainer:
         data, labels = data.to(self.device), labels.to(self.device)  # Move data and labels to GPU
         pred = self.model(data)
         loss = self.loss_function(pred, labels)
-        return loss.item()
+        return {"pred":pred, "label":labels, "loss":loss.item()}
 
     def _run_epoch(self, epoch):
         self.current_epoch = epoch
@@ -60,14 +68,20 @@ class Trainer:
         epoch_loss = epoch_loss/len(self.train_dataloader)
         wandb.log({"train_loss_epoch":epoch_loss})
 
-
+        # Validate epoch
         self.model.eval()
         validation_loss = 0
+        validation_acc = 0
+        total_size = 0
         for data, labels in self.validation_dataloader:
-            batch_loss = self._run_batch(data, labels)
-            validation_loss += batch_loss
+            batch_output_dict = self._run_validation_batch(data, labels)
+            validation_acc += self._compute_acc(batch_output_dict["pred"], batch_output_dict["label"]) * batch_output_dict["label"].shape[0]
+            total_size += batch_output_dict["label"].shape[0]
+            validation_loss += batch_output_dict["loss"]
+        validation_acc = validation_acc / total_size
         validation_loss = validation_loss / len(self.validation_dataloader)
-        wandb.log({"val_loss":validation_loss})
+
+        wandb.log({"val_loss":validation_loss, "val_acc":validation_acc * 100})
 
         if validation_loss < self.best_val_loss:
             self.best_val_loss = validation_loss
@@ -82,7 +96,7 @@ class Trainer:
         return acc
 
     def _save_checkpoint(self):
-        path = "checkpoints"
+        path = os.path.join("checkpoints", self.experiment_path)
         os.makedirs(path, exist_ok=True)
         file_name = f"{self.current_epoch}_".rjust(5,"0") + f"{self.model_name}_{round(self.last_val_loss, 3)}__{round(self.best_val_loss, 3)}.pth"
 
@@ -94,30 +108,50 @@ class Trainer:
 def main():
     print("Main entered")
     learning_rate = 0.0001
-    epochs = 50
-    batch_size = 128
-    model_name = "vit_b_32"
-    run = wandb.init(name="test2",
-        # Set the wandb entity where your project will be logged (generally your team name).
-        entity="avs-846",
-        # Set the wandb project where this run will be logged.
-        project="test-Mini-project",
-        # Track hyperparameters and run metadata.
-        config={
-            "learning_rate": learning_rate,
-            "architecture": model_name,
-            "dataset": "fruit-and-vegetable-image-recognition",
-            "epochs": epochs,
-            "batch_size":batch_size,
-        },
-    )
+    learning_rate_scheduler = "non"
+    epochs = 10
+    batch_size = 16
+    model_name = "vit_b_16"
+    n_layers_to_freeze = 0
+    pretrained_weights = "DEFAULT"
+    log_to_wandb = True
+
+    if log_to_wandb:
+        run = wandb.init(name=f"a_bs{batch_size}_{model_name}_freeze_{n_layers_to_freeze}",
+            # Set the wandb entity where your project will be logged (generally your team name).
+            entity="avs-846",
+            # Set the wandb project where this run will be logged.
+            project="test-Mini-project",
+            # Track hyperparameters and run metadata.
+            config={
+                "learning_rate": learning_rate,
+                "architecture": model_name,
+                "dataset": "fruit-and-vegetable-image-recognition",
+                "epochs": epochs,
+                "batch_size":batch_size,
+                "n_frosen_layers":n_layers_to_freeze,
+                "pretrained_weights":pretrained_weights,
+            },
+        )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check if GPU is available
+
     print(f"Using device: {device}")
 
     # Initialize the model and move it to the GPU if available
-    model = torchvision.models.vit_b_32(weights="IMAGENET1K_V1").to(device)
+    model = torchvision.models.vit_b_16(weights=pretrained_weights).to(device)
 
-    model_transforms = torchvision.models.ViT_B_32_Weights.IMAGENET1K_V1.transforms()
+    # Freeze model wights
+    parameter_index = 0
+    for layer in model.children():
+        for param in layer.parameters():
+            if parameter_index < n_layers_to_freeze:
+                print(f"freezing parameter with index {parameter_index}")
+                param.requires_grad = False
+            else:
+                print(f"did not freeze {parameter_index}")
+            parameter_index += 1
+
+    model_transforms = torchvision.models.ViT_B_16_Weights.DEFAULT.transforms()
 
     print("Creating dataloaders...")
     train_dataset = FruitsAndVeggies(os.path.join(path_to_data, "train"), model_transforms)
@@ -128,8 +162,13 @@ def main():
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    trainer = Trainer(model, train_dataloader, validation_dataloader, optimizer, device, model_name)
-
+    trainer = Trainer(model = model,
+                      train_dataloader = train_dataloader,
+                      validation_dataloader = validation_dataloader,
+                      optimizer = optimizer,
+                      device = device,
+                      model_name = model_name,
+                      experiment_path = f"a_bs{batch_size}_{model_name}_freeze_{n_layers_to_freeze}")
 
 
     for epoch in tqdm(range(epochs)):  # Run for 10 epochs

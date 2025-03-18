@@ -16,6 +16,9 @@ class FruitsAndVeggies(Dataset):
         # create a dict of labels and filepaths
         class_dir_names = sorted(os.listdir(split_root))
         n_classes = len(class_dir_names)
+        
+        print(n_classes)
+
         self.transforms = transforms
         # create one-hot encoding 
         self.dataset_list = []
@@ -40,8 +43,7 @@ class FruitsAndVeggies(Dataset):
         data_list = self.dataset_list[index]
         image_path = data_list[1]
         label = data_list[0]
-        image = Image.open(image_path)
-       
+        image = Image.open(image_path)       
 
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -55,12 +57,13 @@ if __name__ =="__main__":
 
     path_to_data = "/home/a/.cache/kagglehub/datasets/kritikseth/fruit-and-vegetable-image-recognition/versions/8"
     test = FruitsAndVeggies(os.path.join(path_to_data,"validation"), torchvision.models.ViT_B_32_Weights.IMAGENET1K_V1.transforms())
+    
+    data_loader = DataLoader(test, batch_size=32, shuffle=True)
+
+    for data, label in data_loader:
+        print(label)
 
     for data in test:
         image, label = data 
-        print(image.size)
-
-
-
-
+        # print(image.size)
 
