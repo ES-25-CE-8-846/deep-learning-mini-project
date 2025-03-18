@@ -1,7 +1,6 @@
 
 import torch 
 import torchvision 
-from torchinfo import torchinfo
 import torch.utils.data as data
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
@@ -18,13 +17,17 @@ class FruitsAndVeggies(Dataset):
         n_classes = len(class_dir_names)
         
         print(n_classes)
+        
+        self.label_name_dict = {}
+
+        for label, class_name in enumerate(class_dir_names):
+            self.label_name_dict[label] = class_name
 
         self.transforms = transforms
         # create one-hot encoding 
         self.dataset_list = []
         for i, class_dir in enumerate(class_dir_names):
-            label = torch.zeros(n_classes)
-            label[i] = 1
+            label = i
             
             extension_set = {"jpg", "png",  "JPG", "jpeg"}
 
@@ -55,15 +58,17 @@ class FruitsAndVeggies(Dataset):
 
 if __name__ =="__main__":
 
-    path_to_data = "/home/a/.cache/kagglehub/datasets/kritikseth/fruit-and-vegetable-image-recognition/versions/8"
+    path_to_data = "/home/ai/datasets/kaggel/fruits_and_veggies/8/"
     test = FruitsAndVeggies(os.path.join(path_to_data,"validation"), torchvision.models.ViT_B_32_Weights.IMAGENET1K_V1.transforms())
     
     data_loader = DataLoader(test, batch_size=32, shuffle=True)
 
-    for data, label in data_loader:
-        print(label)
+    # for data, label in data_loader:
+    #     print(label)
+    #
+    # for data in test:
+    #     image, label = data
 
-    for data in test:
-        image, label = data 
+    print(test.label_name_dict)
         # print(image.size)
 

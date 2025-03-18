@@ -1,3 +1,5 @@
+from random import shuffle
+from typing import List
 import torch
 from torch.utils.data import DataLoader
 import torchvision
@@ -7,13 +9,11 @@ from tqdm import tqdm
 import wandb
 
 
-
-with open("/ceph/home/student.aau.dk/bd45mb/wandb.txt", 'r') as wandb_key_file:
+with open("/home/ai/.wandb.key", 'r') as wandb_key_file:
     wandb.login(key=wandb_key_file.read().strip(), relogin=True)
 
 
-
-path_to_data = "/ceph/home/student.aau.dk/bd45mb/datasets/kaggle_fruits_and_veggies/"
+path_to_data = "/home/ai/datasets/kaggel/fruits_and_veggies/8/"
 
 class Trainer:
     def __init__(self,
@@ -54,7 +54,7 @@ class Trainer:
         loss = self.loss_function(pred, labels)
         return {"pred":pred, "label":labels, "loss":loss.item()}
 
-    def _run_epoch(self, epoch):
+    def run_epoch(self, epoch):
         self.current_epoch = epoch
         self.model.train()
         b_sz = len(next(iter(self.train_dataloader))[0])
@@ -80,7 +80,6 @@ class Trainer:
             validation_loss += batch_output_dict["loss"]
         validation_acc = validation_acc / total_size
         validation_loss = validation_loss / len(self.validation_dataloader)
-
         wandb.log({"val_loss":validation_loss, "val_acc":validation_acc * 100})
 
         if validation_loss < self.best_val_loss:
@@ -103,13 +102,82 @@ class Trainer:
         full_save_path = os.path.join(path, file_name)
         torch.save(self.model.state_dict(), full_save_path)
 
+class Tester:
+    def __init__(self,
+                 model, 
+                 test_dataloader,
+                 dataset:FruitsAndVeggies,
+                 device,
+                 experiment_path):
+        self.model = model
+        self.dataloader = test_dataloader
+        self.device = device
+        self.experiment_path = experiment_path
+        self.dataset = dataset
+
+    def run_test(self):
+        self.model.eval()
+        all_preds = []
+        all_labels = []
+        with torch.no_grad():
+            for data, label in self.dataloader:
+                result = self._run_test_batch(data, label)
+                all_preds.append(result['pred'])
+                all_labels.append(result['label'])
+
+        self._compute_acc(all_preds, all_labels)
+
+
+
+
+    def _run_test_batch(self, data: torch.Tensor, labels: torch.Tensor):
+        data, labels = data.to(self.device), labels.to(self.device)  # Move data and labels to GPU
+        pred = self.model(data)
+        return {"pred":pred, "label":labels}
+
+    
+    def _compute_acc(self, preds:List[torch.Tensor], labels:List):
+        label_counts={}
+        label_acc_dict={}
+        label_pn=torch.zeros( (len(self.dataset.label_name_dict.keys()), len(preds)) )
+        
+        for key in self.dataset.label_name_dict.keys():
+            label_counts[key] = 0
+
+        total_correct = 0
+        for i, pred, label in zip(range(len(preds)), preds, labels):
+            label_counts[label.item()] += 1
+            preds_index = torch.argmax(pred)
+            label_pn[label.item(), i] = preds_index == label.item()
+            total_correct += preds_index == label.item()
+
+        label_sums = torch.sum(label_pn,dim=1)
+        
+        label_accs_sum = 0
+        for key in self.dataset.label_name_dict.keys():
+            n_correct = label_sums[key]
+            label_acc = n_correct / label_counts[key]
+            label_acc_dict[self.dataset.label_name_dict[key]] = label_acc
+            label_accs_sum += label_acc
+            print(f"{self.dataset.label_name_dict[key]} acc: {label_acc}" )
+        
+        macc = label_accs_sum / len(self.dataset.label_name_dict.keys())
+        oaacc = total_correct / len(preds)
+
+        wandb.log({"test_macc":macc,
+                  "test_oaacc":oaacc,
+                  "test_class_acc":label_acc_dict})
+
+        print(f"label positive negative {label_pn}")
+        print(f"label sums {label_sums}")
+        
 
 
 def main():
     print("Main entered")
     learning_rate = 0.0001
     learning_rate_scheduler = "non"
-    epochs = 10
+    epochs = 1
     batch_size = 16
     model_name = "vit_b_16"
     n_layers_to_freeze = 0
@@ -139,6 +207,9 @@ def main():
 
     # Initialize the model and move it to the GPU if available
     model = torchvision.models.vit_b_16(weights=pretrained_weights).to(device)
+    num_features = model.heads.head.in_features  # Get the input features of the last layer
+    model.heads.head = torch.nn.Linear(num_features, 36).to(device)  # Replace it with a new layer
+
 
     # Freeze model wights
     parameter_index = 0
@@ -147,7 +218,7 @@ def main():
             if parameter_index < n_layers_to_freeze:
                 print(f"freezing parameter with index {parameter_index}")
                 param.requires_grad = False
-            else:
+            else:   
                 print(f"did not freeze {parameter_index}")
             parameter_index += 1
 
@@ -156,9 +227,12 @@ def main():
     print("Creating dataloaders...")
     train_dataset = FruitsAndVeggies(os.path.join(path_to_data, "train"), model_transforms)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True, num_workers=32)
-
+    
     validation_dataset = FruitsAndVeggies(os.path.join(path_to_data, "validation"), model_transforms)
     validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, pin_memory=True)
+
+    test_dataset = FruitsAndVeggies(os.path.join(path_to_data, "test"), model_transforms)
+    test_dataloader = DataLoader(test_dataset, batch_size=1, pin_memory=True, shuffle=False)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
@@ -170,9 +244,17 @@ def main():
                       model_name = model_name,
                       experiment_path = f"a_bs{batch_size}_{model_name}_freeze_{n_layers_to_freeze}")
 
+    tester = Tester(model=model, 
+                    test_dataloader = test_dataloader,
+                    dataset = test_dataset,
+                    device = device,
+                    experiment_path = f"a_bs{batch_size}_{model_name}_freeze_{n_layers_to_freeze}")
 
     for epoch in tqdm(range(epochs)):  # Run for 10 epochs
-        trainer._run_epoch(epoch)
+        trainer.run_epoch(epoch)
+
+    tester.run_test()
+
 
 if __name__ == "__main__":
     main()
