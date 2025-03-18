@@ -3,7 +3,7 @@ from typing import List
 import torch
 from torch.utils.data import DataLoader
 import torchvision
-from fruits_and_veggies_dataloader_simple import FruitsAndVeggies
+from fruits_and_veggies_dataloader_simple import FruitsAndVeggies, FruitsAndVeggiesAugmentator
 import os
 from tqdm import tqdm
 import wandb
@@ -177,15 +177,16 @@ def main():
     print("Main entered")
     learning_rate = 0.0001
     learning_rate_scheduler = "non"
-    epochs = 1
+    epochs = 5
     batch_size = 16
     model_name = "vit_b_16"
     n_layers_to_freeze = 0
     pretrained_weights = "DEFAULT"
     log_to_wandb = True
-
+    with_augs = False
+    augments_to_use = [0]
     if log_to_wandb:
-        run = wandb.init(name=f"a_bs{batch_size}_{model_name}_freeze_{n_layers_to_freeze}",
+        run = wandb.init(name=f"a_bs{batch_size}_{model_name}_augs",
             # Set the wandb entity where your project will be logged (generally your team name).
             entity="avs-846",
             # Set the wandb project where this run will be logged.
@@ -199,6 +200,7 @@ def main():
                 "batch_size":batch_size,
                 "n_frosen_layers":n_layers_to_freeze,
                 "pretrained_weights":pretrained_weights,
+                "augementation":augments_to_use,
             },
         )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Check if GPU is available
@@ -225,7 +227,11 @@ def main():
     model_transforms = torchvision.models.ViT_B_16_Weights.DEFAULT.transforms()
 
     print("Creating dataloaders...")
-    train_dataset = FruitsAndVeggies(os.path.join(path_to_data, "train"), model_transforms)
+    if with_augs:
+        train_augs = FruitsAndVeggiesAugmentator().augementation 
+    else:
+        train_augs = None
+    train_dataset = FruitsAndVeggies(os.path.join(path_to_data, "train"), model_transforms, train_augs)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, pin_memory=True, shuffle=True, num_workers=32)
     
     validation_dataset = FruitsAndVeggies(os.path.join(path_to_data, "validation"), model_transforms)
