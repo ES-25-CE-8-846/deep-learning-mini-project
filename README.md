@@ -6,3 +6,6 @@ We decided to choose the Vision task.
 ```shell
 git clone git@github.com:ES-25-CE-8-846/deep-learning-mini-project.git
 ```
+
+# Report
+https://api.wandb.ai/links/avs-846/4mip0aey
